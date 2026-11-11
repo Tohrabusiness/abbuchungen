@@ -1,7 +1,7 @@
 /* Service Worker: legt die App-Dateien ab, damit sie auch ohne Netz startet.
  * Strategie: erst aus dem Cache antworten, im Hintergrund aktualisieren.
  * Nach Änderungen an den Dateien CACHE hochzählen. */
-const CACHE = 'abbuchungen-v1';
+const CACHE = 'abbuchungen-v3';
 const ASSETS = [
   './',
   './index.html',
