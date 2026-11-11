@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Abbuchungen</title>
+  <meta name="description" content="Überblick über wiederkehrende Abbuchungen pro Woche und Monat">
+  <meta name="theme-color" content="#f4f6f8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0b1115" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Abbuchungen">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <h1 id="title">Übersicht</h1>
+    <button id="addBtn" class="add" type="button" aria-label="Neuen Posten anlegen">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+    </button>
+  </header>
+
+  <main id="view" aria-live="polite"></main>
+
+  <nav class="tabs" aria-label="Ansicht wählen">
+    <button type="button" data-view="overview">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/></svg>
+      <span>Übersicht</span>
+    </button>
+    <button type="button" data-view="week">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      <span>Woche</span>
+    </button>
+    <button type="button" data-view="month">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.4"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+      <span>Monat</span>
+    </button>
+    <button type="button" data-view="items">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.8" cy="6" r="1" /><circle cx="4.8" cy="12" r="1"/><circle cx="4.8" cy="18" r="1"/></svg>
+      <span>Posten</span>
+    </button>
+  </nav>
+
+  <dialog id="itemDlg" aria-labelledby="itemDlgTitle">
+    <form id="itemForm" novalidate>
+      <h2 id="itemDlgTitle">Neuer Posten</h2>
+
+      <label>Name
+        <input id="fName" maxlength="80" autocomplete="off" placeholder="z. B. Miete, Netflix, Handy">
+      </label>
+
+      <div class="two">
+        <label>Betrag (€)
+          <input id="fAmount" inputmode="decimal" autocomplete="off" placeholder="0,00">
+        </label>
+        <label>Rhythmus
+          <select id="fInterval"></select>
+        </label>
+      </div>
+
+      <label>Abbuchung am
+        <input id="fAnchor" type="date">
+      </label>
+      <p class="hint" id="fAnchorHint"></p>
+
+      <label>Endet am <span class="opt">(optional, z. B. bei Ratenzahlung)</span>
+        <input id="fEnd" type="date">
+      </label>
+
+      <label>Kategorie
+        <select id="fCategory"></select>
+      </label>
+
+      <label>Notiz <span class="opt">(optional)</span>
+        <input id="fNote" maxlength="200" autocomplete="off">
+      </label>
+
+      <label class="check"><input id="fActive" type="checkbox" checked> Aktiv <span class="opt">(aus = pausiert)</span></label>
+
+      <p class="error" id="fError" role="alert" hidden></p>
+
+      <div class="actions">
+        <button type="button" id="fDelete" class="danger">Löschen</button>
+        <span class="grow"></span>
+        <button type="button" id="fCancel">Abbrechen</button>
+        <button type="submit" class="primary">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dataDlg" aria-labelledby="dataDlgTitle">
+    <div class="form">
+      <h2 id="dataDlgTitle">Daten sichern &amp; übertragen</h2>
+      <p class="hint">Alle Daten liegen nur auf diesem Gerät. Zum Umziehen oder Sichern: hier exportieren, auf dem anderen Gerät laden. Beim Laden werden Posten hinzugefügt oder, bei gleicher Kennung, aktualisiert. Nichts wird gelöscht.</p>
+
+      <div class="btnrow">
+        <button type="button" id="dExportFile" class="primary">Als Datei sichern</button>
+        <button type="button" id="dCopy">Als Text kopieren</button>
+      </div>
+      <div class="btnrow">
+        <button type="button" id="dImportFile">Aus Datei laden</button>
+        <button type="button" id="dImportText">Text laden</button>
+      </div>
+      <input type="file" id="dFile" accept="application/json,.json,text/plain" hidden>
+
+      <label>Text zum Laden hier einfügen
+        <textarea id="dText" rows="5" spellcheck="false" placeholder='{"app":"abbuchungen", …}'></textarea>
+      </label>
+
+      <p class="error" id="dMsg" hidden></p>
+
+      <div class="actions">
+        <button type="button" id="dWipe" class="danger">Alles löschen</button>
+        <span class="grow"></span>
+        <button type="button" id="dClose">Schließen</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="logic.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
