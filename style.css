@@ -9,6 +9,7 @@
   --accent-soft: #d9f0ec;
   --on-accent: #ffffff;
   --danger: #b42318;
+  --income: #15803d;
   --shadow: 0 1px 2px rgba(15, 26, 34, .06), 0 4px 14px rgba(15, 26, 34, .05);
   --radius: 16px;
   --tabs-h: 62px;
@@ -26,6 +27,7 @@
     --accent-soft: #123a37;
     --on-accent: #04201d;
     --danger: #ff8a80;
+    --income: #4ade80;
     --shadow: none;
   }
 }
@@ -75,11 +77,12 @@ main {
   border-top: 1px solid var(--border);
 }
 .tabs button {
-  flex: 1 1 0; max-width: 170px; height: var(--tabs-h);
+  flex: 1 1 0; min-width: 0; max-width: 120px; height: var(--tabs-h); padding: 0 2px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  border: 0; background: none; color: var(--muted); font-size: .74rem; font-weight: 600;
+  border: 0; background: none; color: var(--muted); font-size: .66rem; font-weight: 600;
 }
-.tabs svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tabs button span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tabs svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .tabs svg circle { fill: currentColor; stroke: none; }
 .tabs button[aria-current="page"] { color: var(--accent); }
 
@@ -238,4 +241,43 @@ dialog label.check input { width: 20px; height: 20px; margin: 0; accent-color: v
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
+}
+
+/* ---------- Einnahmen, Konten, Schulden ---------- */
+
+.inc { color: var(--income); }
+.neg { color: var(--danger); }
+.card-value.neg { color: var(--danger); }
+.card-value.inc { color: var(--income); }
+.btn.small { padding: 7px 12px; font-size: .88rem; margin-top: 8px; }
+
+.sumbar {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+  margin-bottom: 14px; padding: 10px 12px; border-radius: var(--radius); background: var(--accent-soft);
+}
+.sumbar > div { min-width: 0; }
+.sumbar span { display: block; font-size: .74rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.sumbar b { display: block; font-size: 1.02rem; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.row.static:active { background: none; }
+.row-main .mini-meter { display: block; height: 5px; margin-top: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.mini-meter i { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
+.row.done { opacity: .6; }
+
+.cell .sum.pos { color: var(--income); }
+.day-head small.pos { color: var(--income); }
+
+.sub-h { margin: 18px 0 8px; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.paylist:empty::before { content: "Noch nichts eingetragen"; display: block; padding: 6px 0 10px; font-size: .88rem; color: var(--muted); }
+.payrow { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--border); font-size: .92rem; }
+.payrow:first-child { border-top: 0; }
+.payrow .grow { flex: 1; }
+.payrow button { padding: 4px 10px; font-size: 1rem; line-height: 1; border-radius: 8px; }
+.payadd { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto; gap: 6px; align-items: start; }
+.payadd input { margin-top: 0 !important; }
+.remain { margin: 0 0 6px; font-weight: 650; }
+
+@media (max-width: 380px) {
+  .tabs button { font-size: .6rem; }
+  .sumbar b { font-size: .92rem; }
 }

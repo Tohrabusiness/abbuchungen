@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Abbuchungen</title>
-  <meta name="description" content="Überblick über wiederkehrende Abbuchungen pro Woche und Monat">
+  <meta name="description" content="Überblick über Abbuchungen, Einnahmen, Konten und Schulden">
   <meta name="theme-color" content="#f4f6f8" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0b1115" media="(prefers-color-scheme: dark)">
   <meta name="color-scheme" content="light dark">
@@ -20,7 +20,7 @@
 <body>
   <header class="top">
     <h1 id="title">Übersicht</h1>
-    <button id="addBtn" class="add" type="button" aria-label="Neuen Posten anlegen">
+    <button id="addBtn" class="add" type="button" aria-label="Neu anlegen">
       <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
     </button>
   </header>
@@ -44,11 +44,27 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.8" cy="6" r="1" /><circle cx="4.8" cy="12" r="1"/><circle cx="4.8" cy="18" r="1"/></svg>
       <span>Posten</span>
     </button>
+    <button type="button" data-view="accounts">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2.4"/><path d="M3 10.5h18M16.5 15h1.5"/></svg>
+      <span>Konten</span>
+    </button>
+    <button type="button" data-view="debts">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v6.2M9.2 11.2 12 14l2.8-2.8"/></svg>
+      <span>Schulden</span>
+    </button>
   </nav>
 
+  <!-- Posten: Ausgabe oder Einnahme -->
   <dialog id="itemDlg" aria-labelledby="itemDlgTitle">
     <form id="itemForm" novalidate>
       <h2 id="itemDlgTitle">Neuer Posten</h2>
+
+      <label>Art
+        <select id="fType">
+          <option value="expense">Ausgabe (wird abgebucht)</option>
+          <option value="income">Einnahme (kommt rein)</option>
+        </select>
+      </label>
 
       <label>Name
         <input id="fName" maxlength="80" autocomplete="off" placeholder="z. B. Miete, Netflix, Handy">
@@ -63,7 +79,7 @@
         </label>
       </div>
 
-      <label>Abbuchung am
+      <label><span id="fAnchorLabel">Abbuchung am</span>
         <input id="fAnchor" type="date">
       </label>
       <p class="hint" id="fAnchorHint"></p>
@@ -74,6 +90,10 @@
 
       <label>Kategorie
         <select id="fCategory"></select>
+      </label>
+
+      <label>Konto
+        <select id="fAccount"></select>
       </label>
 
       <label>Notiz <span class="opt">(optional)</span>
@@ -93,10 +113,106 @@
     </form>
   </dialog>
 
+  <!-- Konto -->
+  <dialog id="accDlg" aria-labelledby="accDlgTitle">
+    <form id="accForm" novalidate>
+      <h2 id="accDlgTitle">Neues Konto</h2>
+
+      <label>Name
+        <input id="aName" maxlength="60" autocomplete="off" placeholder="z. B. Girokonto, Sparkonto, Bargeld">
+      </label>
+
+      <label>Kontostand (€)
+        <input id="aBalance" inputmode="decimal" autocomplete="off" placeholder="0,00">
+      </label>
+      <label class="check"><input id="aNeg" type="checkbox"> Kontostand ist im Minus</label>
+
+      <label>Stand vom
+        <input id="aDate" type="date">
+      </label>
+      <p class="hint" id="aHint">Trage den Stand ein, den deine Bank gerade anzeigt. Ab diesem Tag rechnet die App Einnahmen und Abbuchungen automatisch mit. Alles bis einschließlich diesem Tag steckt schon im Betrag.</p>
+
+      <p class="error" id="aError" role="alert" hidden></p>
+
+      <div class="actions">
+        <button type="button" id="aDelete" class="danger">Löschen</button>
+        <span class="grow"></span>
+        <button type="button" id="aCancel">Abbrechen</button>
+        <button type="submit" class="primary">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Schuld -->
+  <dialog id="debtDlg" aria-labelledby="debtDlgTitle">
+    <form id="debtForm" novalidate>
+      <h2 id="debtDlgTitle">Neue Schuld</h2>
+
+      <label>Art
+        <select id="dKind">
+          <option value="owe">Ich schulde jemandem Geld</option>
+          <option value="owed">Jemand schuldet mir Geld</option>
+        </select>
+      </label>
+
+      <label><span id="dNameLabel">Wem schuldest du es?</span>
+        <input id="dName" maxlength="80" autocomplete="off" placeholder="z. B. Bank, Anna, Autohaus">
+      </label>
+
+      <label>Gesamtbetrag (€)
+        <input id="dTotal" inputmode="decimal" autocomplete="off" placeholder="0,00">
+      </label>
+
+      <label>Notiz <span class="opt">(optional)</span>
+        <input id="dNote" maxlength="200" autocomplete="off">
+      </label>
+
+      <h3 class="sub-h">Schon gezahlt</h3>
+      <div id="dPayList" class="paylist"></div>
+      <div class="payadd">
+        <input id="dPayAmount" inputmode="decimal" autocomplete="off" placeholder="Betrag" aria-label="Betrag der Teilzahlung">
+        <input id="dPayDate" type="date" aria-label="Datum der Teilzahlung">
+        <button type="button" id="dPayAdd">Eintragen</button>
+      </div>
+      <p class="hint">Teilzahlungen verringern nur die Schuld. Sie buchen nichts von einem Konto ab.</p>
+      <p class="remain" id="dRemain"></p>
+
+      <h3 class="sub-h">Automatische Rate</h3>
+      <label class="check"><input id="dRateOn" type="checkbox"> Rate regelmäßig automatisch verrechnen</label>
+      <div id="dRateBox" hidden>
+        <div class="two">
+          <label>Rate (€)
+            <input id="dRateAmount" inputmode="decimal" autocomplete="off" placeholder="0,00">
+          </label>
+          <label>Rhythmus
+            <select id="dRateInterval"></select>
+          </label>
+        </div>
+        <label>Erste Rate am
+          <input id="dRateAnchor" type="date">
+        </label>
+        <label><span id="dRateAccountLabel">Konto, von dem die Rate abgeht</span>
+          <select id="dRateAccount"></select>
+        </label>
+        <p class="hint">Ab diesem Datum verringert jede Rate die Schuld automatisch und wirkt auf Konto, Woche und Monat. Was du schon gezahlt hast, trägst du oben ein.</p>
+      </div>
+
+      <p class="error" id="dError" role="alert" hidden></p>
+
+      <div class="actions">
+        <button type="button" id="dDelete" class="danger">Löschen</button>
+        <span class="grow"></span>
+        <button type="button" id="dCancel">Abbrechen</button>
+        <button type="submit" class="primary">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Daten -->
   <dialog id="dataDlg" aria-labelledby="dataDlgTitle">
     <div class="form">
       <h2 id="dataDlgTitle">Daten sichern &amp; übertragen</h2>
-      <p class="hint">Alle Daten liegen nur auf diesem Gerät. Zum Umziehen oder Sichern: hier exportieren, auf dem anderen Gerät laden. Beim Laden werden Posten hinzugefügt oder, bei gleicher Kennung, aktualisiert. Nichts wird gelöscht.</p>
+      <p class="hint">Alle Daten liegen nur auf diesem Gerät. Zum Umziehen oder Sichern: hier exportieren, auf dem anderen Gerät laden. Die Sicherung enthält Posten, Konten und Schulden. Beim Laden wird hinzugefügt oder, bei gleicher Kennung, aktualisiert. Nichts wird gelöscht.</p>
 
       <div class="btnrow">
         <button type="button" id="dExportFile" class="primary">Als Datei sichern</button>
