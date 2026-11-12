@@ -70,30 +70,31 @@
         <input id="fName" maxlength="80" autocomplete="off" placeholder="z. B. Miete, Netflix, Handy">
       </label>
 
-      <div class="two">
-        <label>Betrag (€)
-          <input id="fAmount" inputmode="decimal" autocomplete="off" placeholder="0,00">
-        </label>
-        <label>Rhythmus
-          <select id="fInterval"></select>
-        </label>
-      </div>
-
-      <label><span id="fAnchorLabel">Abbuchung am</span>
-        <input id="fAnchor" type="date">
-      </label>
-      <p class="hint" id="fAnchorHint"></p>
-
-      <label>Endet am <span class="opt">(optional, z. B. bei Ratenzahlung)</span>
-        <input id="fEnd" type="date">
-      </label>
-
-      <label>Kategorie
-        <select id="fCategory"></select>
+      <label>Betrag (€)
+        <input id="fAmount" inputmode="decimal" autocomplete="off" placeholder="0,00">
       </label>
 
       <label>Konto
         <select id="fAccount"></select>
+      </label>
+
+      <label><span id="fAnchorLabel">Abbuchung am</span>
+        <input id="fAnchor" type="date">
+      </label>
+
+      <label class="check"><input id="fRepeat" type="checkbox" checked> Wiederholt sich automatisch</label>
+      <div id="fRepeatBox">
+        <label>Rhythmus
+          <select id="fInterval"></select>
+        </label>
+        <p class="hint" id="fAnchorHint"></p>
+        <label id="fEndLabel">Endet am <span class="opt">(optional, z. B. bei Ratenzahlung)</span>
+          <input id="fEnd" type="date">
+        </label>
+      </div>
+
+      <label>Kategorie
+        <select id="fCategory"></select>
       </label>
 
       <label>Notiz <span class="opt">(optional)</span>

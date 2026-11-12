@@ -171,6 +171,7 @@
       case 'quarterly': return 'Alle 3 Monate am ' + p.d + '.';
       case 'halfyearly': return 'Alle 6 Monate am ' + p.d + '.';
       case 'yearly': return 'Jährlich am ' + fmtDM.format(dateOf(it.anchor));
+      case 'once': return 'Einmalig am ' + fmtDM.format(dateOf(it.anchor));
       default: return '';
     }
   }
@@ -542,11 +543,12 @@
   const f = {
     type: $('#fType'), name: $('#fName'), amount: $('#fAmount'), interval: $('#fInterval'), anchor: $('#fAnchor'),
     anchorLabel: $('#fAnchorLabel'), end: $('#fEnd'), category: $('#fCategory'), account: $('#fAccount'),
-    note: $('#fNote'), active: $('#fActive'), error: $('#fError'), del: $('#fDelete'), hint: $('#fAnchorHint')
+    note: $('#fNote'), active: $('#fActive'), error: $('#fError'), del: $('#fDelete'), hint: $('#fAnchorHint'),
+    repeat: $('#fRepeat'), repeatBox: $('#fRepeatBox')
   };
   let editingId = null;
 
-  for (const [key, spec] of Object.entries(L.INTERVALS)) f.interval.append(el('option', { value: key, text: spec.label }));
+  for (const [key, spec] of Object.entries(L.INTERVALS)) if (!spec.once) f.interval.append(el('option', { value: key, text: spec.label }));
 
   function fillCategories(type, keep) {
     const keys = L.categoriesFor(type);
@@ -575,17 +577,19 @@
 
   function updateHint() {
     const iso = f.anchor.value;
-    if (!L.isValidISO(iso)) { f.hint.textContent = ''; return; }
+    f.repeatBox.hidden = !f.repeat.checked;
+    if (!f.repeat.checked || !L.isValidISO(iso)) { f.hint.textContent = ''; return; }
     const p = L.parseISO(iso);
     const wd = fmtWeekday.format(dateOf(iso));
     const kind = f.interval.value;
     if (kind === 'weekly') f.hint.textContent = 'Jede Woche am gleichen Wochentag: ' + wd + '.';
     else if (kind === 'biweekly') f.hint.textContent = 'Alle 14 Tage, ab diesem Datum (' + wd + ').';
     else if (p.d > 28) f.hint.textContent = 'Am ' + p.d + '. des Monats. Hat ein Monat weniger Tage, gilt der letzte Tag des Monats.';
-    else f.hint.textContent = kind === 'yearly' ? 'Einmal im Jahr, jeweils am ' + fmtDM.format(dateOf(iso)) + '.' : 'Der Tag im Monat ist der ' + p.d + '.';
+    else f.hint.textContent = kind === 'yearly' ? 'Einmal im Jahr, jeweils am ' + fmtDM.format(dateOf(iso)) + '.' : 'Wird jeden Monat am ' + p.d + '. gebucht.';
   }
   f.anchor.addEventListener('input', updateHint);
   f.interval.addEventListener('change', updateHint);
+  f.repeat.addEventListener('change', updateHint);
   f.type.addEventListener('change', () => applyType(null));
 
   function showError(msg) { f.error.textContent = msg; f.error.hidden = !msg; }
@@ -597,7 +601,8 @@
     f.type.value = it && it.type === 'income' ? 'income' : 'expense';
     f.name.value = it ? it.name : '';
     f.amount.value = it ? String(it.amount).replace('.', ',') : '';
-    f.interval.value = it ? it.interval : 'monthly';
+    f.repeat.checked = it ? it.interval !== 'once' : true;
+    f.interval.value = it && it.interval !== 'once' ? it.interval : 'monthly';
     f.anchor.value = it ? it.anchor : (state.view === 'month' ? state.selDay : L.todayISO());
     f.end.value = it ? it.end : '';
     f.note.value = it ? it.note : '';
@@ -616,12 +621,12 @@
     if (!f.name.value.trim()) return showError('Bitte einen Namen eintragen.');
     if (!Number.isFinite(amount) || amount <= 0) return showError('Bitte einen Betrag größer 0 eintragen, z. B. 12,50.');
     if (!L.isValidISO(f.anchor.value)) return showError('Bitte ein Datum wählen.');
-    if (f.end.value && f.end.value < f.anchor.value) return showError('Das Ende liegt vor dem ersten Termin.');
+    if (f.repeat.checked && f.end.value && f.end.value < f.anchor.value) return showError('Das Ende liegt vor dem ersten Termin.');
 
     const item = L.normalizeItem({
       id: editingId || L.newId(), type: f.type.value,
-      name: f.name.value, amount, interval: f.interval.value, anchor: f.anchor.value,
-      end: f.end.value, category: f.category.value, account: f.account.value, note: f.note.value, active: f.active.checked
+      name: f.name.value, amount, interval: f.repeat.checked ? f.interval.value : 'once', anchor: f.anchor.value,
+      end: f.repeat.checked ? f.end.value : '', category: f.category.value, account: f.account.value, note: f.note.value, active: f.active.checked
     });
     if (!item) return showError('Die Eingaben sind unvollständig.');
 
@@ -726,7 +731,7 @@
   let draftPayments = [];
   const debtError = (msg) => { d.error.textContent = msg; d.error.hidden = !msg; };
 
-  for (const [key, spec] of Object.entries(L.INTERVALS)) d.rateInterval.append(el('option', { value: key, text: spec.label }));
+  for (const [key, spec] of Object.entries(L.INTERVALS)) if (!spec.once) d.rateInterval.append(el('option', { value: key, text: spec.label }));
 
   function applyKind() {
     const owe = d.kind.value !== 'owed';

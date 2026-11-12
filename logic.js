@@ -12,7 +12,8 @@
     monthly:    { label: 'Monatlich',       months: 1 },
     quarterly:  { label: 'Vierteljährlich', months: 3 },
     halfyearly: { label: 'Halbjährlich',    months: 6 },
-    yearly:     { label: 'Jährlich',        months: 12 }
+    yearly:     { label: 'Jährlich',        months: 12 },
+    once:       { label: 'Einmalig',        once: true }
   };
 
   const CATEGORIES = {
@@ -106,6 +107,11 @@
     const anchor = item.anchor;
     const last = item.end && item.end < to ? item.end : to;
     if (from > last) return out;
+
+    if (spec.once) {
+      if (anchor >= from && anchor <= last) out.push(anchor);
+      return out;
+    }
 
     if (spec.days) {
       const a = dayNum(anchor), f = dayNum(from), t = dayNum(last);
@@ -201,7 +207,7 @@
   /** Betrag auf einen durchschnittlichen Monat umgerechnet. */
   function monthlyEquivalent(item) {
     const spec = INTERVALS[item.interval];
-    if (!spec) return 0;
+    if (!spec || spec.once) return 0;
     if (spec.days) return (item.amount * (spec.days === 7 ? 52 : 26)) / 12;
     return item.amount / spec.months;
   }
@@ -290,7 +296,7 @@
     const n = Math.ceil(left / rateC);
     const it = debtItem(debt);
     const spec = INTERVALS[it.interval];
-    if (n > 1200) return '';
+    if (!spec || spec.once || n > 1200) return '';
     const end = spec.days ? addDays(it.anchor, (n - 1) * spec.days) : monthEnd(addMonths(it.anchor, (n - 1) * spec.months));
     const occ = occurrences(it, it.anchor, end);
     return occ.length ? occ[occ.length - 1] : '';
