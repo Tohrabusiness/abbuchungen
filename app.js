@@ -71,7 +71,7 @@
     toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
   }
 
-  /* ---------- Speicher (IndexedDB, Version 2: Posten, Konten, Schulden) ---------- */
+  /* ---------- Speicher (IndexedDB, Version 3: Posten, Konten, Schulden, Einstellungen) ---------- */
 
   const DB = (function () {
     const NAME = 'abbuchungen';
@@ -82,11 +82,12 @@
       if (!opened) {
         opened = new Promise((resolve, reject) => {
           if (!window.indexedDB) { reject(new Error('IndexedDB nicht verfügbar')); return; }
-          const req = indexedDB.open(NAME, 2);
+          const req = indexedDB.open(NAME, 3);
           // Aus Version 1 (nur Posten) wird hier ergänzt, vorhandene Daten bleiben unberührt.
           req.onupgradeneeded = () => {
             const db = req.result;
             for (const s of STORES) if (!db.objectStoreNames.contains(s)) db.createObjectStore(s, { keyPath: 'id' });
+            if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
           };
           req.onsuccess = () => resolve(req.result);
           req.onerror = () => reject(req.error);
@@ -115,6 +116,9 @@
       put: (store, obj) => run(store, 'readwrite', (s) => s.put(obj)),
       putMany: (store, list) => run(store, 'readwrite', (s) => { list.forEach((i) => s.put(i)); }),
       remove: (store, id) => run(store, 'readwrite', (s) => s.delete(id)),
+      getMeta: async (key) => { const r = await run('meta', 'readonly', (s) => s.get(key)); return r ? r.value : null; },
+      setMeta: (key, value) => run('meta', 'readwrite', (s) => s.put({ key, value })),
+      delMeta: (key) => run('meta', 'readwrite', (s) => s.delete(key)),
       clearAll: async () => {
         const db = await open();
         return new Promise((resolve, reject) => {
@@ -134,6 +138,7 @@
     items: [],
     accounts: [],
     debts: [],
+    deleted: {},
     view: 'overview',
     weekRef: L.todayISO(),
     monthRef: L.monthStart(L.todayISO()),
@@ -155,7 +160,7 @@
   }
 
   async function persist(action) {
-    try { await action(); state.storageOk = true; return true; }
+    try { await action(); state.storageOk = true; queueSync(1500); return true; }
     catch (e) { state.storageOk = false; console.error(e); return false; }
   }
 
@@ -224,7 +229,8 @@
     return el('div', { class: 'empty-hero' },
       el('h2', { text: 'Noch nichts eingetragen' }),
       el('p', { text: 'Lege deine wiederkehrenden Abbuchungen und Einnahmen an, z. B. Miete, Gehalt oder Abos.' }),
-      el('button', { type: 'button', class: 'btn primary', onclick: () => openItem(null), text: 'Ersten Posten anlegen' }));
+      el('button', { type: 'button', class: 'btn primary', onclick: () => openItem(null), text: 'Ersten Posten anlegen' }),
+      el('p', { style: 'margin:18px auto 0' }, el('button', { type: 'button', class: 'btn', onclick: openData, text: 'Daten von anderem Gerät laden' })));
   }
 
   function lowNote(f) {
@@ -420,8 +426,8 @@
       }
     }
     root.append(el('div', { style: 'margin-top:18px' },
-      el('button', { type: 'button', class: 'btn', onclick: openData, text: 'Daten sichern & übertragen' })));
-    root.append(el('p', { class: 'footnote', text: 'Alle Angaben bleiben auf diesem Gerät. Sie werden nirgendwo hochgeladen.' }));
+      el('button', { type: 'button', class: 'btn', onclick: openData, text: 'Daten & Abgleich' })));
+    root.append(el('p', { class: 'footnote', text: sync.cfg ? 'Alle Angaben liegen auf diesem Gerät. Für den Abgleich werden sie nur verschlüsselt in deinem privaten Repository abgelegt.' : 'Alle Angaben bleiben auf diesem Gerät. Sie werden nirgendwo hochgeladen.' }));
     return root;
   }
 
@@ -630,6 +636,8 @@
     });
     if (!item) return showError('Die Eingaben sind unvollständig.');
 
+    item.updatedAt = Date.now();
+
     const ok = await persist(() => DB.put('items', item));
     const i = state.items.findIndex((x) => x.id === item.id);
     if (i >= 0) state.items[i] = item; else state.items.push(item);
@@ -642,7 +650,7 @@
   f.del.addEventListener('click', async () => {
     const it = state.items.find((x) => x.id === editingId);
     if (!it || !confirm('„' + it.name + '“ wirklich löschen?')) return;
-    await persist(() => DB.remove('items', it.id));
+    await persist(async () => { await DB.remove('items', it.id); await markDeleted(it.id); });
     state.items = state.items.filter((x) => x.id !== it.id);
     itemDlg.close();
     render();
@@ -697,6 +705,7 @@
 
     const acc = L.normalizeAccount({ id: editingAccId || L.newId(), name: a.name.value, balance, date: a.date.value });
     if (!acc) return accError('Die Eingaben sind unvollständig.');
+    acc.updatedAt = Date.now();
     const ok = await persist(() => DB.put('accounts', acc));
     const i = state.accounts.findIndex((x) => x.id === acc.id);
     if (i >= 0) state.accounts[i] = acc; else state.accounts.push(acc);
@@ -710,7 +719,7 @@
     const acc = state.accounts.find((x) => x.id === editingAccId);
     if (!acc) return;
     if (!confirm('Konto „' + acc.name + '“ löschen? Die Posten bleiben bestehen und zählen dann zum ersten Konto.')) return;
-    await persist(() => DB.remove('accounts', acc.id));
+    await persist(async () => { await DB.remove('accounts', acc.id); await markDeleted(acc.id); });
     state.accounts = state.accounts.filter((x) => x.id !== acc.id);
     accDlg.close();
     render();
@@ -831,6 +840,7 @@
       note: d.note.value, payments: draftPayments, rate
     });
     if (!debt) return debtError('Die Eingaben sind unvollständig.');
+    debt.updatedAt = Date.now();
     const ok = await persist(() => DB.put('debts', debt));
     const i = state.debts.findIndex((x) => x.id === debt.id);
     if (i >= 0) state.debts[i] = debt; else state.debts.push(debt);
@@ -843,7 +853,7 @@
   d.del.addEventListener('click', async () => {
     const debt = state.debts.find((x) => x.id === editingDebtId);
     if (!debt || !confirm('„' + debt.name + '“ wirklich löschen?')) return;
-    await persist(() => DB.remove('debts', debt.id));
+    await persist(async () => { await DB.remove('debts', debt.id); await markDeleted(debt.id); });
     state.debts = state.debts.filter((x) => x.id !== debt.id);
     debtDlg.close();
     render();
@@ -860,7 +870,7 @@
     dMsg.style.color = bad ? '' : 'var(--accent)';
   }
 
-  function openData() { dataMsg(''); dText.value = ''; if (!dataDlg.open) dataDlg.showModal(); }
+  function openData() { dataMsg(''); dText.value = ''; renderSyncBox(); if (!dataDlg.open) dataDlg.showModal(); }
 
   const hasData = () => state.items.length + state.accounts.length + state.debts.length > 0;
 
@@ -919,6 +929,8 @@
     const validTotal = items.length + accounts.length + debts.length;
     if (!validTotal) return dataMsg('Keine gültigen Einträge gefunden.', true);
 
+    const now = Date.now();
+    for (const r of [...items, ...accounts, ...debts]) r.updatedAt = now;
     await persist(async () => {
       if (items.length) await DB.putMany('items', items);
       if (accounts.length) await DB.putMany('accounts', accounts);
@@ -948,13 +960,176 @@
   $('#dWipe').addEventListener('click', async () => {
     if (!hasData()) return dataMsg('Es ist nichts gespeichert.', true);
     const n = state.items.length + state.accounts.length + state.debts.length;
-    if (!confirm('Wirklich ALLES löschen (' + n + ' Einträge: Posten, Konten und Schulden)? Das lässt sich nicht rückgängig machen. Tipp: erst sichern.')) return;
-    await persist(() => DB.clearAll());
-    state.items = []; state.accounts = []; state.debts = [];
+    if (!confirm('Wirklich ALLES löschen (' + n + ' Einträge: Posten, Konten und Schulden)? Das lässt sich nicht rückgängig machen. Tipp: erst sichern.' + (sync.cfg ? ' Nur dieses Gerät wird geleert; beim nächsten Abgleich kommen die Daten von den anderen Geräten zurück.' : ''))) return;
+    await persist(async () => { await DB.clearAll(); await DB.delMeta('deleted'); });
+    state.items = []; state.accounts = []; state.debts = []; state.deleted = {};
     render();
     dataMsg('Alles gelöscht.');
   });
   $('#dClose').addEventListener('click', () => dataDlg.close());
+
+  /* ---------- Abgleich zwischen Geräten ---------- */
+
+  const sync = { cfg: null, busy: false, again: false, timer: null, bad: false, msg: '', tried: 0 };
+  const sStatus = $('#sStatus'), syncDlg = $('#syncDlg'), syncForm = $('#syncForm'), sErr = $('#sError');
+
+  async function markDeleted(id) {
+    state.deleted[id] = Date.now();
+    await DB.setMeta('deleted', state.deleted);
+  }
+
+  const fmtStamp = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+  function renderSyncBox() {
+    const on = !!sync.cfg;
+    $('#sSetup').textContent = on ? 'Einstellungen' : 'Einrichten';
+    $('#sSetup').classList.toggle('primary', !on);
+    $('#sNow').hidden = !on;
+    $('#sOff').hidden = !on;
+    $('#sHint').hidden = on;
+    let t = 'Nicht eingerichtet.';
+    if (on) {
+      if (sync.busy) t = 'Gleiche ab …';
+      else if (sync.bad) t = sync.msg;
+      else t = 'Verbunden' + (sync.cfg.last ? ' · zuletzt abgeglichen ' + fmtStamp.format(new Date(sync.cfg.last)) : '');
+    }
+    sStatus.textContent = t;
+    sStatus.classList.toggle('neg', on && sync.bad && !sync.busy);
+  }
+
+  function cleanRemote(raw) {
+    const o = raw && typeof raw === 'object' ? raw : {};
+    const deleted = {};
+    if (o.deleted && typeof o.deleted === 'object') for (const [id, ts] of Object.entries(o.deleted)) deleted[id] = L.stamp(ts);
+    return {
+      items: (Array.isArray(o.items) ? o.items : []).map(L.normalizeItem).filter(Boolean),
+      accounts: (Array.isArray(o.accounts) ? o.accounts : []).map(L.normalizeAccount).filter(Boolean),
+      debts: (Array.isArray(o.debts) ? o.debts : []).map(L.normalizeDebt).filter(Boolean),
+      deleted
+    };
+  }
+
+  /** Übernimmt den zusammengeführten Stand. Der Zustand wird sofort (ohne Wartezeit) gesetzt, damit Eingaben zwischendurch nicht verloren gehen. */
+  async function applyMerged(m) {
+    const writes = [];
+    let changed = false;
+    for (const kind of ['items', 'accounts', 'debts']) {
+      const cur = new Map(state[kind].map((r) => [r.id, JSON.stringify(r)]));
+      const keep = new Set(m[kind].map((r) => r.id));
+      const put = m[kind].filter((r) => cur.get(r.id) !== JSON.stringify(r));
+      const del = [...cur.keys()].filter((id) => !keep.has(id));
+      if (put.length || del.length) {
+        state[kind] = m[kind];
+        changed = true;
+        if (put.length) writes.push(() => DB.putMany(kind, put));
+        del.forEach((id) => writes.push(() => DB.remove(kind, id)));
+      }
+    }
+    if (L.canonical({ deleted: m.deleted }) !== L.canonical({ deleted: state.deleted })) {
+      state.deleted = m.deleted;
+      writes.push(() => DB.setMeta('deleted', m.deleted));
+    }
+    if (changed) render();
+    for (const w of writes) await w();
+    return changed;
+  }
+
+  async function syncOnce(cfg) {
+    const remote = Sync.client(cfg);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const got = await remote.get();
+      const rd = got ? cleanRemote(await Sync.decrypt(got.file, cfg.pass)) : cleanRemote(null);
+      const merged = L.mergeSync({ items: state.items, accounts: state.accounts, debts: state.debts, deleted: state.deleted }, rd);
+      await applyMerged(merged);
+      if (got && L.canonical(merged) === L.canonical(rd)) return;
+      const file = await Sync.encrypt(merged, cfg.pass, got ? got.file.salt : null);
+      try { await remote.put(file, got ? got.sha : null); return; }
+      catch (e) { if (e.code !== 'CONFLICT') throw e; }
+    }
+    throw new Error('Abgleich gerade nicht möglich, weil gleichzeitig gespeichert wurde. Bitte gleich nochmal versuchen.');
+  }
+
+  async function runSync(manual) {
+    if (!sync.cfg) return false;
+    if (sync.busy) { sync.again = true; return false; }
+    sync.busy = true; sync.bad = false; sync.tried = Date.now();
+    renderSyncBox();
+    let ok = false;
+    try {
+      await syncOnce(sync.cfg);
+      sync.cfg.last = Date.now();
+      await DB.setMeta('sync', sync.cfg);
+      ok = true;
+      if (manual) toast('Abgeglichen');
+    } catch (e) {
+      sync.bad = true;
+      sync.msg = (e && e.message) || 'Abgleich fehlgeschlagen.';
+      if (manual) toast('Abgleich fehlgeschlagen');
+      if (!e || !e.code) console.error(e);
+    } finally {
+      sync.busy = false;
+      renderSyncBox();
+      if (sync.again) { sync.again = false; queueSync(400); }
+    }
+    return ok;
+  }
+
+  function queueSync(delay) {
+    if (!sync.cfg) return;
+    clearTimeout(sync.timer);
+    sync.timer = setTimeout(() => runSync(false), delay);
+  }
+
+  function syncError(msg) { sErr.textContent = msg; sErr.hidden = !msg; }
+
+  $('#sSetup').addEventListener('click', () => {
+    $('#sRepo').value = sync.cfg ? sync.cfg.repo : '';
+    $('#sToken').value = sync.cfg ? sync.cfg.token : '';
+    $('#sPass').value = sync.cfg ? sync.cfg.pass : '';
+    $('#sPass2').value = '';
+    syncError('');
+    syncDlg.showModal();
+  });
+  $('#sCancel').addEventListener('click', () => syncDlg.close());
+  $('#sNow').addEventListener('click', () => runSync(true));
+  $('#sOff').addEventListener('click', async () => {
+    if (!confirm('Abgleich auf diesem Gerät beenden? Deine Daten bleiben hier erhalten, werden aber nicht mehr mit den anderen Geräten abgeglichen.')) return;
+    clearTimeout(sync.timer);
+    await DB.delMeta('sync');
+    sync.cfg = null; sync.bad = false;
+    renderSyncBox();
+    toast('Abgleich beendet');
+  });
+
+  syncForm.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const repo = Sync.parseRepo($('#sRepo').value);
+    const token = $('#sToken').value.trim();
+    const pass = $('#sPass').value;
+    if (!repo) return syncError('Bitte das Repository als „Name/abbuchungen-daten“ eintragen.');
+    if (token.length < 20) return syncError('Bitte den Zugangsschlüssel (Token) einfügen.');
+    if (pass.length < 8) return syncError('Das Passwort braucht mindestens 8 Zeichen.');
+    const save = $('#sSave');
+    save.disabled = true; save.textContent = 'Prüfe …'; syncError('');
+    try {
+      const cfg = { repo, token, pass, api: sync.cfg ? sync.cfg.api : undefined, last: 0 };
+      const c = Sync.client(cfg);
+      const info = await c.info();
+      if (!info.private) throw new Error('Dieses Repository ist öffentlich. Bitte ein privates Repository verwenden.');
+      const got = await c.get();
+      if (got) await Sync.decrypt(got.file, pass);
+      else if (pass !== $('#sPass2').value) throw new Error('Beim ersten Gerät bitte das Passwort unten zur Kontrolle noch einmal eintragen.');
+      sync.cfg = cfg;
+      await DB.setMeta('sync', cfg);
+      syncDlg.close();
+      renderSyncBox();
+      await runSync(true);
+    } catch (e) {
+      syncError((e && e.message) || 'Verbindung fehlgeschlagen.');
+    } finally {
+      save.disabled = false; save.textContent = 'Verbinden';
+    }
+  });
 
   /* ---------- Start ---------- */
 
@@ -966,7 +1141,7 @@
   document.querySelectorAll('.tabs button').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
 
   // Klick auf den abgedunkelten Rand schließt Dialoge
-  for (const dlg of [itemDlg, accDlg, debtDlg, dataDlg]) {
+  for (const dlg of [itemDlg, accDlg, debtDlg, dataDlg, syncDlg]) {
     dlg.addEventListener('click', (ev) => {
       if (ev.target !== dlg) return;
       const r = dlg.getBoundingClientRect();
@@ -982,7 +1157,9 @@
     const now = L.todayISO();
     if (now !== lastDay) { lastDay = now; state.weekRef = now; state.monthRef = L.monthStart(now); state.selDay = now; }
     render();
+    if (sync.cfg && Date.now() - sync.tried > 20000) runSync(false);
   });
+  window.addEventListener('online', () => { if (sync.cfg) runSync(false); });
 
   async function boot() {
     try {
@@ -990,12 +1167,15 @@
       state.items = items.map(L.normalizeItem).filter(Boolean);
       state.accounts = accounts.map(L.normalizeAccount).filter(Boolean);
       state.debts = debts.map(L.normalizeDebt).filter(Boolean);
+      state.deleted = (await DB.getMeta('deleted')) || {};
+      sync.cfg = await DB.getMeta('sync');
       if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
     } catch (e) {
       console.error(e);
       state.storageOk = false;
     }
     render();
+    if (sync.cfg) runSync(false);
 
     if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
       navigator.serviceWorker.register('sw.js').catch((e) => console.warn('Service Worker:', e));
@@ -1003,7 +1183,7 @@
   }
 
   // Für automatische Tests erreichbar, sonst unsichtbar
-  window.__app = { state, render, setView, openItem, openAccount, openDebt };
+  window.__app = { state, render, setView, openItem, openAccount, openDebt, DB, sync, runSync };
 
   boot();
 })();

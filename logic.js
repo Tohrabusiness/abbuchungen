@@ -376,6 +376,8 @@
     return Number.isFinite(v) ? (neg ? -v : v) : NaN;
   }
 
+  function stamp(v) { const n = Number(v); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0; }
+
   function newId() {
     try { if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID(); } catch (e) { /* unsicherer Kontext */ }
     return 'id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
@@ -402,7 +404,8 @@
       category: CATEGORIES[raw.category] && categoryFits(raw.category, type) ? raw.category : (type === 'income' ? 'einnahme' : 'sonstiges'),
       account: typeof raw.account === 'string' ? raw.account : '',
       note: String(raw.note == null ? '' : raw.note).slice(0, 200),
-      active: raw.active !== false
+      active: raw.active !== false,
+      updatedAt: stamp(raw.updatedAt)
     };
   }
 
@@ -415,7 +418,8 @@
       id: typeof raw.id === 'string' && raw.id ? raw.id : newId(),
       name: name.slice(0, 60),
       balance: round2(balance),
-      date: isValidISO(raw.date) ? raw.date : todayISO()
+      date: isValidISO(raw.date) ? raw.date : todayISO(),
+      updatedAt: stamp(raw.updatedAt)
     };
   }
 
@@ -447,8 +451,38 @@
       total: round2(total),
       payments,
       rate,
-      note: String(raw.note == null ? '' : raw.note).slice(0, 200)
+      note: String(raw.note == null ? '' : raw.note).slice(0, 200),
+      updatedAt: stamp(raw.updatedAt)
     };
+  }
+
+  /* ---------- Abgleich zwischen Geräten ---------- */
+
+  const KINDS = ['items', 'accounts', 'debts'];
+
+  /** Zusammenführen zweier Datenstände. Pro Eintrag gewinnt die neuere Änderung; Löschungen werden mitgeführt. */
+  function mergeSync(a, b) {
+    const deleted = {};
+    for (const src of [a.deleted || {}, b.deleted || {}])
+      for (const [id, ts] of Object.entries(src)) deleted[id] = Math.max(deleted[id] || 0, stamp(ts));
+    const out = { deleted };
+    for (const kind of KINDS) {
+      const map = new Map();
+      for (const rec of (a[kind] || []).concat(b[kind] || [])) {
+        const cur = map.get(rec.id);
+        if (!cur || stamp(rec.updatedAt) > stamp(cur.updatedAt)) map.set(rec.id, rec);
+      }
+      out[kind] = [...map.values()].filter((r) => !(deleted[r.id] > stamp(r.updatedAt)));
+    }
+    return out;
+  }
+
+  /** Eindeutige Textform eines Datenstands, zum Vergleichen. */
+  function canonical(d) {
+    const o = {};
+    for (const kind of KINDS) o[kind] = (d[kind] || []).slice().sort((x, y) => (x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
+    o.deleted = Object.keys(d.deleted || {}).sort().map((k) => [k, d.deleted[k]]);
+    return JSON.stringify(o);
   }
 
   return {
@@ -459,6 +493,7 @@
     monthlyEquivalent, monthlyTotal, monthlyIncome, monthlyTotals,
     debtItem, debtEntries, debtRemaining, debtPayoffDate,
     effectiveAccountId, accountBalance, forecast,
-    parseAmount, parseSignedAmount, normalizeItem, normalizeAccount, normalizeDebt, newId
+    parseAmount, parseSignedAmount, normalizeItem, normalizeAccount, normalizeDebt, newId,
+    stamp, mergeSync, canonical
   };
 });

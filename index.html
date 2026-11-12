@@ -212,7 +212,18 @@
   <!-- Daten -->
   <dialog id="dataDlg" aria-labelledby="dataDlgTitle">
     <div class="form">
-      <h2 id="dataDlgTitle">Daten sichern &amp; übertragen</h2>
+      <h2 id="dataDlgTitle">Daten &amp; Abgleich</h2>
+
+      <h3 class="sub-h" style="margin-top:0">Abgleich zwischen Geräten</h3>
+      <p class="remain" id="sStatus">Nicht eingerichtet.</p>
+      <p class="hint" id="sHint">Gleicht Posten, Konten und Schulden zwischen iPhone, PC und Laptop automatisch ab. Die Daten werden vorher auf dem Gerät mit deinem Passwort verschlüsselt.</p>
+      <div class="btnrow">
+        <button type="button" id="sSetup" class="primary">Einrichten</button>
+        <button type="button" id="sNow" hidden>Jetzt abgleichen</button>
+      </div>
+      <button type="button" id="sOff" class="danger" hidden>Abgleich beenden</button>
+
+      <h3 class="sub-h">Sicherung von Hand</h3>
       <p class="hint">Alle Daten liegen nur auf diesem Gerät. Zum Umziehen oder Sichern: hier exportieren, auf dem anderen Gerät laden. Die Sicherung enthält Posten, Konten und Schulden. Beim Laden wird hinzugefügt oder, bei gleicher Kennung, aktualisiert. Nichts wird gelöscht.</p>
 
       <div class="btnrow">
@@ -239,9 +250,39 @@
     </div>
   </dialog>
 
+  <!-- Abgleich einrichten -->
+  <dialog id="syncDlg" aria-labelledby="syncDlgTitle">
+    <form id="syncForm" novalidate>
+      <h2 id="syncDlgTitle">Abgleich einrichten</h2>
+      <p class="hint" style="margin-top:0">Nötig sind ein <b>privates</b> GitHub-Repository und ein Zugangsschlüssel (Token) nur für dieses Repository. Auf jedem Gerät gibst du dieselben drei Angaben ein.</p>
+
+      <label>Repository
+        <input id="sRepo" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Name/abbuchungen-daten">
+      </label>
+      <label>Zugangsschlüssel (Token)
+        <input id="sToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="github_pat_…">
+      </label>
+      <label>Passwort zum Verschlüsseln
+        <input id="sPass" type="password" autocomplete="new-password" placeholder="mindestens 8 Zeichen">
+      </label>
+      <label>Passwort wiederholen <span class="opt">(nur beim ersten Gerät nötig)</span>
+        <input id="sPass2" type="password" autocomplete="new-password">
+      </label>
+      <p class="hint">Merke dir das Passwort gut. Ohne Passwort kann niemand die Daten lesen, auch ich nicht, und es lässt sich nicht zurücksetzen.</p>
+
+      <p class="error" id="sError" role="alert" hidden></p>
+      <div class="actions">
+        <span class="grow"></span>
+        <button type="button" id="sCancel">Abbrechen</button>
+        <button type="submit" id="sSave" class="primary">Verbinden</button>
+      </div>
+    </form>
+  </dialog>
+
   <div id="toast" role="status" aria-live="polite"></div>
 
   <script src="logic.js"></script>
+  <script src="sync.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
